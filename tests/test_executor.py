@@ -5,8 +5,6 @@ https://shashforge.dev/log/the-harness-gets-a-spine/
 """
 from __future__ import annotations
 
-import pytest
-
 from agent_harness.contract import Tool, ToolContract
 from agent_harness.errors import PermanentToolError, TransientToolError
 from agent_harness.executor import Escalation, Executor, Resolution, Step
