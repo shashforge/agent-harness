@@ -1,0 +1,114 @@
+{
+  "final_state": "done",
+  "trace": [
+    {
+      "seq": 1,
+      "step": 0,
+      "src": "plan",
+      "dst": "act",
+      "reason": "step planned",
+      "detail": {
+        "tool": "echo"
+      }
+    },
+    {
+      "seq": 2,
+      "step": 0,
+      "src": "act",
+      "dst": "verify",
+      "reason": "result produced",
+      "detail": {}
+    },
+    {
+      "seq": 3,
+      "step": 0,
+      "src": "verify",
+      "dst": "checkpoint",
+      "reason": "verified",
+      "detail": {}
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "src": "plan",
+      "dst": "act",
+      "reason": "step planned",
+      "detail": {
+        "tool": "echo"
+      }
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "src": "act",
+      "dst": "verify",
+      "reason": "result produced",
+      "detail": {}
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "src": "verify",
+      "dst": "checkpoint",
+      "reason": "verified",
+      "detail": {}
+    },
+    {
+      "seq": 7,
+      "step": 2,
+      "src": "plan",
+      "dst": "act",
+      "reason": "step planned",
+      "detail": {
+        "tool": "echo"
+      }
+    },
+    {
+      "seq": 8,
+      "step": 2,
+      "src": "act",
+      "dst": "verify",
+      "reason": "result produced",
+      "detail": {}
+    },
+    {
+      "seq": 9,
+      "step": 2,
+      "src": "verify",
+      "dst": "checkpoint",
+      "reason": "verified",
+      "detail": {}
+    },
+    {
+      "seq": 10,
+      "step": 3,
+      "src": "plan",
+      "dst": "done",
+      "reason": "goal met",
+      "detail": {}
+    }
+  ],
+  "checkpoints": [
+    {
+      "step": 0,
+      "tool": "echo",
+      "result": {
+        "n": 0
+      }
+    },
+    {
+      "step": 1,
+      "tool": "echo",
+      "result": {
+        "n": 1
+      }
+    },
+    {
+      "step": 2,
+      "tool": "echo",
+      "result": {
+        "n": 2
+      }
+    }
+  ]
+}
