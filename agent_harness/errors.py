@@ -33,3 +33,7 @@ class PermissionDenied(HarnessError):
 
 class ContextOverflow(HarnessError):
     """Token watermark crossed. Compact, then re-plan."""
+
+
+class PlannerProtocolError(HarnessError):
+    """The model broke the planner output contract. Never guess a fix."""
