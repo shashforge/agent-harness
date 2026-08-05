@@ -9,18 +9,15 @@ A checkpoint of unverified state is just a saved bug.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Callable, Optional
 
 from .contract import Tool
 from .errors import (
-    BudgetExhausted,
-    HarnessError,
     PermanentToolError,
     PermissionDenied,
     TransientToolError,
-    VerificationFailure,
 )
 from .states import State, Transition
 
@@ -63,6 +60,12 @@ class Executor:
     planner(checkpoints) -> Step | None   (None means: goal met)
     verifiers: name -> fn(result) -> bool
     on_escalate(Escalation) -> Resolution
+
+    store: anything with append_transition / append_checkpoint / load /
+    last_seq (see persistence.JsonlStore). With resume=True, verified
+    checkpoints from the store are loaded before the first plan, and the
+    sequence counter continues where the previous run stopped — one
+    continuous trace across process deaths.
     """
 
     def __init__(
@@ -73,6 +76,8 @@ class Executor:
         on_escalate: Callable[[Escalation], Resolution],
         granted_scopes: frozenset[str] = frozenset(),
         max_steps: int = 25,
+        store: object = None,
+        resume: bool = False,
     ) -> None:
         self.tools = tools
         self.verifiers = verifiers
@@ -80,23 +85,31 @@ class Executor:
         self.on_escalate = on_escalate
         self.granted_scopes = granted_scopes
         self.max_steps = max_steps
+        self.store = store
         self._transitions: list[Transition] = []
         self._checkpoints: list[dict] = []
         self._seq = 0
+        if resume:
+            if store is None:
+                raise ValueError("resume=True requires a store")
+            _, checkpoints = store.load()
+            self._checkpoints = list(checkpoints)
+            self._seq = store.last_seq()
 
     # -- trace ------------------------------------------------------------
 
     def _record(self, step: int, src: State, dst: State, reason: str,
                 **detail: object) -> None:
         self._seq += 1
-        self._transitions.append(
-            Transition(self._seq, step, src, dst, reason, dict(detail))
-        )
+        t = Transition(self._seq, step, src, dst, reason, dict(detail))
+        self._transitions.append(t)
+        if self.store is not None:
+            self.store.append_transition(t)
 
     # -- the loop ---------------------------------------------------------
 
     def run(self) -> RunResult:
-        step_index = 0
+        step_index = len(self._checkpoints)   # 0 fresh; further on resume
         while True:
             if step_index >= self.max_steps:
                 res = self._escalate(step_index, "step budget exhausted", 0)
@@ -185,9 +198,11 @@ class Executor:
             # CHECKPOINT: only verified state is progress
             self._record(step_index, State.VERIFY, State.CHECKPOINT,
                          "verified")
-            self._checkpoints.append(
-                {"step": step_index, "tool": step.tool, "result": result}
-            )
+            checkpoint = {"step": step_index, "tool": step.tool,
+                          "result": result}
+            self._checkpoints.append(checkpoint)
+            if self.store is not None:
+                self.store.append_checkpoint(checkpoint)
             return _Outcome.CHECKPOINTED
 
     # -- terminal & escalation --------------------------------------------
