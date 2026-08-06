@@ -15,6 +15,7 @@ from typing import Callable, Optional
 
 from .contract import Tool
 from .errors import (
+    ContextOverflow,
     PermanentToolError,
     PermissionDenied,
     TransientToolError,
@@ -66,6 +67,11 @@ class Executor:
     checkpoints from the store are loaded before the first plan, and the
     sequence counter continues where the previous run stopped — one
     continuous trace across process deaths.
+
+    context_budget / compactor (see context.ContextBudget and
+    context.FoldingCompactor): when the budget's watermark is crossed,
+    the compactor shrinks the *view* handed to the planner. The
+    checkpoint list, the store, and the trace are never compacted.
     """
 
     def __init__(
@@ -78,6 +84,8 @@ class Executor:
         max_steps: int = 25,
         store: object = None,
         resume: bool = False,
+        context_budget: object = None,
+        compactor: Optional[Callable[[list[dict]], list[dict]]] = None,
     ) -> None:
         self.tools = tools
         self.verifiers = verifiers
@@ -86,6 +94,8 @@ class Executor:
         self.granted_scopes = granted_scopes
         self.max_steps = max_steps
         self.store = store
+        self.context_budget = context_budget
+        self.compactor = compactor
         self._transitions: list[Transition] = []
         self._checkpoints: list[dict] = []
         self._seq = 0
@@ -118,8 +128,12 @@ class Executor:
                                         "aborted after step budget")
                 step_index = 0  # human granted a fresh budget
 
-            # PLAN
-            step = self.planner(list(self._checkpoints))
+            # PLAN — through the context lens if a budget is set
+            view = self._planner_view(step_index)
+            if view is None:                      # human aborted at the lens
+                return self._finish(step_index, State.FAILED,
+                                    "aborted at context watermark")
+            step = self.planner(view)
             if step is None:
                 return self._finish(step_index, State.DONE, "goal met")
             self._record(step_index, State.PLAN, State.ACT,
@@ -135,6 +149,42 @@ class Executor:
             if outcome is _Outcome.ABORTED:
                 return self._finish(step_index, State.FAILED,
                                     "aborted by human")
+
+    def _planner_view(self, step_index: int) -> Optional[list[dict]]:
+        """The checkpoints the planner is shown. Compaction happens
+        here and only here — the record itself is never touched.
+
+        Returns None only when the human aborts at an escalation.
+        """
+        view = list(self._checkpoints)
+        if self.context_budget is None:
+            return view
+        try:
+            self.context_budget.check(view)
+            return view
+        except ContextOverflow as e:
+            if self.compactor is None:
+                self._record(step_index, State.PLAN, State.ESCALATE,
+                             "context watermark crossed, no compactor",
+                             error=str(e))
+                res = self._escalate(step_index, str(e), 0)
+                return view if res is Resolution.RESUME else None
+
+        before = self.context_budget.units(view)
+        view = self.compactor(view)
+        after = self.context_budget.units(view)
+        self._record(step_index, State.PLAN, State.PLAN,
+                     "context compacted", units_before=before,
+                     units_after=after)
+        try:
+            self.context_budget.check(view)
+            return view
+        except ContextOverflow as e:
+            self._record(step_index, State.PLAN, State.ESCALATE,
+                         "still over watermark after compaction",
+                         error=str(e))
+            res = self._escalate(step_index, str(e), 1)
+            return view if res is Resolution.RESUME else None
 
     def _act_and_verify(self, step_index: int, step: Step) -> "_Outcome":
         tool = self.tools[step.tool]
