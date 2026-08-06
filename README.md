@@ -5,9 +5,10 @@ state machine instead of a `while` loop with vibes.
 
 **Status: working core.** The executor, tool contracts, failure
 taxonomy, transition trace, checkpoint persistence, crash-resume,
-replay, golden-trace regression tests, and an LLM-backed planner all
-work and are tested. The planner is a plain callable, which is the
-point: the harness owns control flow; the model is a component.
+replay, golden-trace regression tests, context compaction, and an
+LLM-backed planner all work and are tested. The planner is a plain
+callable, which is the point: the harness owns control flow; the
+model is a component.
 
 Design writing behind this code:
 
@@ -15,6 +16,7 @@ Design writing behind this code:
 - [The harness gets a spine](https://shashforge.dev/log/the-harness-gets-a-spine/) — the state machine, failure taxonomy, and tool contract this repo implements
 - [Replay is the feature](https://shashforge.dev/log/replay-is-the-feature/) — persistence, crash-resume, and golden traces
 - [The model shows up](https://shashforge.dev/log/the-model-shows-up/) — an LLM behind the planner callable
+- [The lens, not the eraser](https://shashforge.dev/log/the-lens-not-the-eraser/) — context compaction that never touches the record
 
 ## The rules the code enforces
 
@@ -42,6 +44,10 @@ Design writing behind this code:
 - The output contract applies to models too: the LLM planner answers
   with one JSON step or `{"done": true}`. Anything else is a
   `PlannerProtocolError`, not an improvised recovery.
+- Compaction is a lens, not an eraser. Past the context watermark the
+  compactor shrinks what the planner is *shown*; the checkpoint list,
+  the store, and the trace never lose a byte. A compactor that can't
+  get back under the watermark escalates after one try.
 
 ## Run the tests
 
@@ -75,7 +81,10 @@ agent_harness/
   executor.py     # the state machine
   persistence.py  # append-only JSONL store, crash-resume, replay
   golden.py       # golden traces as regression tests
+  context.py      # context watermark + compaction (the lens)
   llm_planner.py  # an LLM behind the planner callable
+examples/
+  live_run.py     # a real model driving the harness on this repo
 tests/
   golden/happy_path.json  # the executor's canonical behavior, pinned
   test_*.py               # each test pins one rule from the design
@@ -86,9 +95,9 @@ tests/
 - ~~Checkpoint persistence + replay from trace~~ done
 - ~~An LLM-backed planner behind the same callable interface~~ done
 - ~~Eval harness: golden traces as regression tests~~ done
-- First live-model trace, published as a post
-- Context compaction at the token watermark (`ContextOverflow` exists;
-  nothing raises it yet)
+- ~~Context compaction at the token watermark~~ done
+- First live-model trace, published as a post — the run kit is
+  `examples/live_run.py`; it needs a key and a human
 - ADRs, starting with [ADR-001: Python for the reference, C++ where it counts](https://shashforge.dev/log/adr-001-python-vs-cpp/)
 
 MIT licensed. By [Shashi Shankar](https://shashforge.dev).
