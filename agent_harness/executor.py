@@ -15,10 +15,12 @@ from typing import Callable, Optional
 
 from .contract import Tool
 from .errors import (
+    BudgetExhausted,
     ContextOverflow,
     PermanentToolError,
     PermissionDenied,
     TransientToolError,
+    VerificationFailure,
 )
 from .states import State, Transition
 
@@ -187,15 +189,26 @@ class Executor:
             return view if res is Resolution.RESUME else None
 
     def _act_and_verify(self, step_index: int, step: Step) -> "_Outcome":
+        """One dispatch block, and the taxonomy IS the dispatch.
+
+        Every branch below is an exception from errors.py, raised by
+        the machinery itself. No ad-hoc conditionals deciding fate.
+        """
         tool = self.tools[step.tool]
         contract = tool.contract
         transient_left = contract.max_retries
         verify_left = contract.max_retries
 
         while True:
-            # permission gate: checked before every call, never retried
             try:
+                # permission gate: checked before every call, never retried
                 contract.check_scopes(self.granted_scopes)
+                self._spend(tool)                    # raises BudgetExhausted
+                result = tool.fn(**step.args)        # raises Transient/Permanent
+                self._record(step_index, State.ACT, State.VERIFY,
+                             "result produced")
+                self._verify(contract, result)       # raises VerificationFailure
+
             except PermissionDenied as e:
                 self._record(step_index, State.ACT, State.ESCALATE,
                              "permission denied", error=str(e))
@@ -203,15 +216,11 @@ class Executor:
                 return (_Outcome.REPLAN if res is Resolution.RESUME
                         else _Outcome.ABORTED)
 
-            if not tool.spend_call():
-                res = self._escalate(step_index,
-                                     f"call budget spent for {contract.name}", 0)
+            except BudgetExhausted as e:
+                res = self._escalate(step_index, str(e), 0)
                 return (_Outcome.REPLAN if res is Resolution.RESUME
                         else _Outcome.ABORTED)
 
-            # ACT
-            try:
-                result = tool.fn(**step.args)
             except TransientToolError as e:
                 if transient_left > 0:
                     transient_left -= 1
@@ -223,27 +232,24 @@ class Executor:
                 res = self._escalate(step_index, str(e), contract.max_retries)
                 return (_Outcome.REPLAN if res is Resolution.RESUME
                         else _Outcome.ABORTED)
+
             except PermanentToolError as e:
                 self._record(step_index, State.ACT, State.PLAN,
                              "permanent tool error, re-planning", error=str(e))
                 return _Outcome.REPLAN
 
-            # VERIFY
-            self._record(step_index, State.ACT, State.VERIFY, "result produced")
-            if contract.verifier is not None:
-                ok = self.verifiers[contract.verifier](result)
-                if not ok:
-                    if verify_left > 0:
-                        verify_left -= 1
-                        self._record(step_index, State.VERIFY, State.ACT,
-                                     "verification failed, retrying")
-                        continue
-                    self._record(step_index, State.VERIFY, State.ESCALATE,
-                                 "verification budget spent")
-                    res = self._escalate(step_index, "verification failed",
-                                         contract.max_retries)
-                    return (_Outcome.REPLAN if res is Resolution.RESUME
-                            else _Outcome.ABORTED)
+            except VerificationFailure:
+                if verify_left > 0:
+                    verify_left -= 1
+                    self._record(step_index, State.VERIFY, State.ACT,
+                                 "verification failed, retrying")
+                    continue
+                self._record(step_index, State.VERIFY, State.ESCALATE,
+                             "verification budget spent")
+                res = self._escalate(step_index, "verification failed",
+                                     contract.max_retries)
+                return (_Outcome.REPLAN if res is Resolution.RESUME
+                        else _Outcome.ABORTED)
 
             # CHECKPOINT: only verified state is progress
             self._record(step_index, State.VERIFY, State.CHECKPOINT,
@@ -254,6 +260,19 @@ class Executor:
             if self.store is not None:
                 self.store.append_checkpoint(checkpoint)
             return _Outcome.CHECKPOINTED
+
+    @staticmethod
+    def _spend(tool: Tool) -> None:
+        if not tool.spend_call():
+            raise BudgetExhausted(
+                f"call budget spent for {tool.contract.name}")
+
+    def _verify(self, contract, result) -> None:
+        if contract.verifier is None:
+            return
+        if not self.verifiers[contract.verifier](result):
+            raise VerificationFailure(
+                f"verifier '{contract.verifier}' rejected the result")
 
     # -- terminal & escalation --------------------------------------------
 
