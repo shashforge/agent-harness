@@ -1,5 +1,7 @@
 # agent-harness
 
+[![tests](https://github.com/shashforge/agent-harness/actions/workflows/tests.yml/badge.svg)](https://github.com/shashforge/agent-harness/actions/workflows/tests.yml)
+
 A reference implementation of an agent execution harness: an explicit
 state machine instead of a `while` loop with vibes.
 
@@ -55,6 +57,10 @@ Design writing behind this code:
 pip install pytest
 python -m pytest tests/ -v
 ```
+
+CI runs the same suite on every push, across CPython 3.10 through
+3.13 — the versions `pyproject.toml` claims. The badge above is that
+run, not a decoration.
 
 ## Running against a live model
 
