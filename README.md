@@ -50,6 +50,9 @@ Design writing behind this code:
   compactor shrinks what the planner is *shown*; the checkpoint list,
   the store, and the trace never lose a byte. A compactor that can't
   get back under the watermark escalates after one try.
+- The invariants hold under behavior nobody chose: a seeded sweep runs
+  hundreds of randomized planners, tools, and verifiers through the
+  executor and replays every trace they leave. Same seed, same trace.
 
 ## Run the tests
 
