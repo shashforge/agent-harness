@@ -94,9 +94,11 @@ agent_harness/
   llm_planner.py  # an LLM behind the planner callable
 examples/
   live_run.py     # a real model driving the harness on this repo
+docs/adr/         # architecture decision records, numbered, never rewritten
 tests/
   golden/happy_path.json  # the executor's canonical behavior, pinned
-  test_*.py               # each test pins one rule from the design
+  test_invariants.py      # 250 seeded worlds; the invariants must hold in all
+  test_*.py               # each other test pins one rule from the design
 ```
 
 ## Roadmap
@@ -107,6 +109,8 @@ tests/
 - ~~Context compaction at the token watermark~~ done
 - First live-model trace, published as a post — the run kit is
   `examples/live_run.py`; it needs a key and a human
-- ADRs, starting with [ADR-001: Python for the reference, C++ where it counts](https://shashforge.dev/log/adr-001-python-vs-cpp/)
+- ~~ADRs in the repo~~ done: [docs/adr/](docs/adr/) holds 0001 (Python
+  reference, C++ where it counts) and 0002 (seeded sweep over a
+  property-testing framework); new decisions get a new number
 
 MIT licensed. By [Shashi Shankar](https://shashforge.dev).
