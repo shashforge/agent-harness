@@ -65,6 +65,17 @@ CI runs the same suite on every push, across CPython 3.10 through
 3.13 — the versions `pyproject.toml` claims. The badge above is that
 run, not a decoration.
 
+## Reading a trace
+
+```bash
+python -m agent_harness.inspect out/run.jsonl
+```
+
+Prints the run as a timeline — every transition with its reason,
+retries and escalations marked — and ends with the replay verdict.
+It cannot execute anything; a trace that fails replay exits nonzero
+and says why.
+
 ## Running against a live model
 
 ```python
@@ -92,6 +103,7 @@ agent_harness/
   golden.py       # golden traces as regression tests
   context.py      # context watermark + compaction (the lens)
   llm_planner.py  # an LLM behind the planner callable
+  inspect.py      # read a trace back as a story (tool-free)
 examples/
   live_run.py     # a real model driving the harness on this repo
 docs/adr/         # architecture decision records, numbered, never rewritten
