@@ -1,6 +1,6 @@
 [project]
 name = "agent-harness"
-version = "0.3.3"
+version = "0.3.4"
 description = "Reference implementation of an agent execution harness: explicit state machine, tool contracts, failure taxonomy, replayable traces."
 authors = [{ name = "Shashi Shankar", email = "shashi@shashforge.dev" }]
 readme = "README.md"
